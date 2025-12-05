@@ -55,7 +55,10 @@ class CustomMetaDriveEnv(gym.Env):
 
         self.genetic_flag = genetic_flag
 
+        self.use_verifai = False
         self.feedback_result = None
+
+
         self.loop = None
         self.record_scenic_sim_results = record_scenic_sim_results
         self.feedback_fn = feedback_fn
@@ -202,18 +205,33 @@ class CustomMetaDriveEnv(gym.Env):
     def compute_episode_pvl(self):
         return
 
+    def set_verifai_feedback(self, feedback: float):
+        self.feedback_result = float(feedback)
+    
+    def enable_verifai(self, flag: bool = True):
+        self.use_verifai = bool(flag)
+
     def get_scene(self):
-        """每个 episode 开头，简单从 Scenic 采样一个新 scene."""
+        """每个 episode 开头，从 Scenic 采样一个新 scene。
+
+        - use_verifai == False 或 feedback_result 为 None：
+            走 scenario.generate()，不传 feedback ⇒ 纯 random
+        - use_verifai == True 且 feedback_result 不为 None：
+            走 scenario.generate(feedback=...) ⇒ CE/BO sampler 用 feedback 优化采样
+        """
         scenario = self.scenario
-    # 允许 self.scenario 是 [scenario1, scenario2] 这种列表
         if isinstance(scenario, list):
             scenario = random.choice(scenario)
 
-        scene, _ = scenario.generate()
-    # Scenic 有时候返回 [scene]，统一成单个 Scene
+        if self.use_verifai and (self.feedback_result is not None):
+            scene, _ = scenario.generate(feedback=self.feedback_result)
+        else:
+            scene, _ = scenario.generate()
+
         if isinstance(scene, list):
             if len(scene) == 0:
                 raise RuntimeError("Scenic returned an empty scene list")
             scene = scene[0]
 
         return scene
+
